@@ -34,18 +34,6 @@ struct ContentView: View {
         }
         .formStyle(.grouped)
         .frame(minWidth: 460, minHeight: 520)
-        .toolbar {
-            ToolbarItem {
-                if monitor.isRefreshing {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Button("Refresh", systemImage: "arrow.clockwise") {
-                        Task { await monitor.refresh() }
-                    }
-                    .disabled(monitor.present.isEmpty)
-                }
-            }
-        }
     }
 }
 
@@ -63,10 +51,21 @@ private struct KeyboardHeader: View {
                 Text(monitor.modelName ?? "AULA F75")
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.primary)
-                Text(subtitle)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                HStack(spacing: 6) {
+                    Text(subtitle)
+                        .monospacedDigit()
+                    // The window is hosted by AppKit, so this sits here
+                    // rather than in a toolbar.
+                    Button("Refresh", systemImage: "arrow.clockwise") {
+                        Task { await monitor.refresh() }
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .disabled(monitor.present.isEmpty || monitor.isRefreshing)
+                    .help("Read the keyboard again")
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
         }
         .textCase(nil)

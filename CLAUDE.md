@@ -37,7 +37,7 @@ bricked by writing settings over the dongle.
 | `F75Driver/ContentView.swift` | Status window, permission prompt, lighting controls. |
 | `F75Driver/KeyboardIllustration.swift` | Top-down drawing of the F75 in the owner's colourway (black, navy, yellow), from shapes in key units. No product photo is shipped. |
 | `F75Driver/StatusMenu.swift` | Menu bar item and its menu, in AppKit (`NSStatusItem`) so the header row can be a custom view. |
-| `F75Driver/F75DriverApp.swift` | Window scene and app delegate. The status item is made in `applicationDidFinishLaunching`; making it in `App.init()` crashes. |
+| `F75Driver/F75DriverApp.swift` | App delegate: owns the monitor, the status item and the status window (an AppKit window, so it can be shown from the menu or a Finder reopen). The status item is made in `applicationDidFinishLaunching`; making it in `App.init()` crashes. |
 | `F75DriverTests/F75DriverTests.swift` | Swift Testing suites for the protocol layer. |
 | `Scripts/test-protocol.sh` | Runs those tests without Xcode. |
 | `Scripts/make-icon.swift` | Draws the app icon and writes every size into the asset catalog. Run from the repo root. |
@@ -96,6 +96,10 @@ Done and verified on a real F75:
 - Menu header in the style of the system battery menu (model, level,
   connection, power), lighting submenu over the cable, Open at Login.
   Lighting from the menu has not yet been exercised on hardware.
+- Menu bar app with no Dock icon (`LSUIElement`), like Rectangle: the
+  window opens on first launch, while permission is missing, from
+  Settings… in the menu, or when the app is opened again from Finder.
+  Closing it leaves the app running.
 - Power state: on battery, charging, plugged in and not charging.
 - Lighting over the cable: effect, brightness, speed. Only "Fixed on" and
   brightness changes were exercised on hardware.
@@ -106,7 +110,6 @@ Not built, roughly in the order discussed with the owner:
 - Custom per-key lighting.
 - Key remapping and macros.
 - Other settings writes: sleep timer, polling rate, Win lock, Mac layout.
-- Menu-bar-only mode (no Dock icon, no window at launch).
 
 ## Conventions
 

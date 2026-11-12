@@ -91,9 +91,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
         refresh.isEnabled = !monitor.present.isEmpty && !monitor.isRefreshing
         menu.addItem(refresh)
-        menu.addItem(ActionItem("Open F75 Driver", key: "o") { [weak self] in
+        menu.addItem(ActionItem("Settings…", key: ",") { [weak self] in
             self?.openStatusWindow()
-            NSApp.activate()
         })
         let login = ActionItem("Open at Login") { [weak self] in self?.toggleLaunchAtLogin() }
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
