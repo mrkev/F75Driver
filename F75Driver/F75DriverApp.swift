@@ -29,6 +29,12 @@ struct F75DriverApp: App {
     }
 }
 
+enum StatusWindow {
+    /// Content width of the status window, the same for every tab.
+    static let width: CGFloat = 460
+    static let minHeight: CGFloat = 520
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let monitor = KeyboardMonitor()
     private var statusMenu: StatusMenuController?
@@ -73,16 +79,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
+    /// A settings-style window with General and Advanced tabs in its toolbar.
     private func makeStatusWindow() -> NSWindow {
-        let host = NSHostingController(rootView: ContentView().environment(monitor))
-        host.sizingOptions = [.minSize]
-        let window = NSWindow(contentViewController: host)
-        window.title = "F75 Driver"
+        let tabs = NSTabViewController()
+        tabs.tabStyle = .toolbar
+        tabs.addTabViewItem(tab(GeneralView(), label: "General", symbol: "gearshape"))
+        tabs.addTabViewItem(tab(AdvancedView(), label: "Advanced", symbol: "gearshape.2"))
+        let window = NSWindow(contentViewController: tabs)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.toolbarStyle = .preference
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 540, height: 720))
+        // Fixed width, resizable height. Set on the window: the tab view
+        // controller does not pass its children's size limits on.
+        window.contentMinSize = NSSize(width: StatusWindow.width, height: StatusWindow.minHeight)
+        window.contentMaxSize = NSSize(width: StatusWindow.width, height: .greatestFiniteMagnitude)
+        window.setContentSize(NSSize(width: StatusWindow.width, height: 720))
         window.center()
+        // Restores the saved frame if there is one; keep only its height and position.
         window.setFrameAutosaveName("StatusWindow")
+        let content = window.contentRect(forFrameRect: window.frame)
+        if content.width != StatusWindow.width {
+            window.setContentSize(NSSize(width: StatusWindow.width, height: max(content.height, StatusWindow.minHeight)))
+        }
         return window
+    }
+
+    private func tab<Content: View>(_ content: Content, label: String, symbol: String) -> NSTabViewItem {
+        let host = NSHostingController(rootView: content.environment(monitor))
+        // No preferred size, so switching tabs keeps the window's size.
+        host.sizingOptions = []
+        // The window title follows the selected tab.
+        host.title = label
+        let item = NSTabViewItem(viewController: host)
+        item.label = label
+        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        return item
     }
 }

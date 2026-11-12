@@ -34,7 +34,9 @@ bricked by writing settings over the dongle.
 | `F75Driver/Protocol/F75Protocol.swift` | Pure protocol: request bytes, reply parsing, settings page model, write guard. Foundation only. |
 | `F75Driver/HID/HIDTransport.swift` | IOKit HID: finds the two interfaces, opens them, moves raw reports. |
 | `F75Driver/KeyboardMonitor.swift` | `@Observable` state: permission, connections, periodic reads, the lighting write. |
-| `F75Driver/ContentView.swift` | Status window, permission prompt, lighting controls. |
+| `F75Driver/GeneralView.swift` | General tab: keyboard drawing and battery, permission prompt, lighting controls, keyboard settings, Open at Login. |
+| `F75Driver/AdvancedView.swift` | Advanced tab: per-connection model ID, battery status byte, errors and raw replies. |
+| `F75Driver/LaunchAtLogin.swift` | Open at Login through `SMAppService`, shared by the menu and the General tab. |
 | `F75Driver/KeyboardIllustration.swift` | Top-down drawing of the F75 in the owner's colourway (black, navy, yellow), from shapes in key units. No product photo is shipped. |
 | `F75Driver/StatusMenu.swift` | Menu bar item and its menu, in AppKit (`NSStatusItem`) so the header row can be a custom view. |
 | `F75Driver/F75DriverApp.swift` | App delegate: owns the monitor, the status item and the status window (an AppKit window, so it can be shown from the menu or a Finder reopen). The status item is made in `applicationDidFinishLaunching`; making it in `App.init()` crashes. |
@@ -78,8 +80,8 @@ unless marked `nonisolated`. The app is sandboxed with the USB entitlement
   off the main thread.
 - **The grant only takes effect after relaunching the app.**
 - **A command-line probe cannot open the keyboard.** Permission belongs to
-  the app bundle, so hardware checks go through the running app. Its "Raw
-  data" disclosure shows the bytes of every reply.
+  the app bundle, so hardware checks go through the running app. Its Advanced
+  tab shows the bytes of every reply.
 - **The mode switch matters.** The cable interface only exists with the
   switch on USB. On 2.4G the cable just charges.
 - **The keyboard sleeps**, possibly after one minute, and then ignores the

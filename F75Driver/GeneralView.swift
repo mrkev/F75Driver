@@ -1,11 +1,14 @@
 //
-//  ContentView.swift
+//  GeneralView.swift
 //  F75Driver
+//
+//  The General tab: the keyboard, its lighting and settings, and the app's
+//  own options.
 //
 
 import SwiftUI
 
-struct ContentView: View {
+struct GeneralView: View {
     @Environment(KeyboardMonitor.self) private var monitor
 
     var body: some View {
@@ -26,14 +29,58 @@ struct ContentView: View {
             if !monitor.blocked.isEmpty {
                 PermissionSection()
             }
-            ForEach(ConnectionKind.allCases) { kind in
-                if monitor.present.contains(kind) {
-                    ConnectionSection(kind: kind)
+            Section {
+                LaunchAtLoginToggle()
+            } header: {
+                SectionTitle("App")
+            }
+            if let kind = monitor.activeConnection, !monitor.blocked.contains(kind),
+               let status = monitor.status[kind] {
+                if let error = status.error {
+                    Section {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if let settings = status.settings {
+                    Section {
+                        if kind == .cable {
+                            LightingControls(settings: settings)
+                        } else {
+                            LightingRows(settings: settings)
+                            Text("Lighting can be changed over the USB cable.")
+                                .foregroundStyle(.secondary)
+                        }
+                    } header: {
+                        SectionTitle("Lighting")
+                    }
+                    Section {
+                        KeyboardSettingsRows(settings: settings)
+                    } header: {
+                        SectionTitle("Keyboard")
+                    }
                 }
             }
         }
         .formStyle(.grouped)
-        .frame(minWidth: 460, minHeight: 520)
+        .frame(width: StatusWindow.width)
+        .frame(minHeight: StatusWindow.minHeight)
+    }
+}
+
+/// A section title with one fixed style. A grouped form gives the first
+/// section header a smaller, lighter style than the rest, which made the
+/// title under the keyboard drawing look different from the others.
+struct SectionTitle: View {
+    let title: String
+
+    init(_ title: String) { self.title = title }
+
+    var body: some View {
+        Text(title)
+            .font(.headline)
+            .foregroundStyle(.primary)
+            .textCase(nil)
     }
 }
 
@@ -90,7 +137,7 @@ private struct PermissionSection: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        Section("Permission needed") {
+        Section {
             Label {
                 Text("macOS requires Input Monitoring permission before an app can talk to a keyboard. F75 Driver only reads the keyboard's settings; it does not record what you type. After turning it on in System Settings, quit and reopen F75 Driver.")
             } icon: {
@@ -113,70 +160,9 @@ private struct PermissionSection: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
+        } header: {
+            SectionTitle("Permission needed")
         }
-    }
-}
-
-private struct ConnectionSection: View {
-    @Environment(KeyboardMonitor.self) private var monitor
-    let kind: ConnectionKind
-
-    var body: some View {
-        let status = monitor.status[kind]
-        Section(kind.title) {
-            if monitor.blocked.contains(kind) {
-                LabeledContent("Status", value: "Waiting for permission")
-            } else if let status {
-                if let error = status.error {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.secondary)
-                }
-                if let identity = status.identity {
-                    LabeledContent("Model", value: identity.modelName ?? "Unknown")
-                    LabeledContent("Model ID", value: identity.hex)
-                }
-                if let battery = status.battery {
-                    LabeledContent("Battery") {
-                        HStack(spacing: 8) {
-                            ProgressView(value: Double(min(max(battery.level, 0), 100)), total: 100)
-                                .frame(width: 90)
-                            Text("\(battery.level)%").monospacedDigit()
-                        }
-                    }
-                    LabeledContent("Power", value: battery.power.title)
-                }
-                if let settings = status.settings {
-                    SettingsRows(settings: settings)
-                    if kind == .cable {
-                        LightingControls(settings: settings)
-                    }
-                }
-                if !status.raw.isEmpty {
-                    DisclosureGroup("Raw data") {
-                        ForEach(status.raw, id: \.name) { item in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.name).font(.caption).foregroundStyle(.secondary)
-                                Text(hexDump(item.bytes))
-                                    .font(.system(.caption, design: .monospaced))
-                                    .textSelection(.enabled)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                }
-                if let updated = status.updated {
-                    LabeledContent("Updated") { Text(updated, style: .time) }
-                }
-            } else {
-                LabeledContent("Status", value: "Reading…")
-            }
-        }
-    }
-
-    private func hexDump(_ bytes: [UInt8]) -> String {
-        stride(from: 0, to: bytes.count, by: 16).map { start in
-            bytes[start..<min(start + 16, bytes.count)].map { String(format: "%02X", $0) }.joined(separator: " ")
-        }.joined(separator: "\n")
     }
 }
 
@@ -190,9 +176,13 @@ private struct LightingControls: View {
     @State private var speed = 0
 
     var body: some View {
-        Picker("Change effect", selection: $effect) {
+        Picker("Effect", selection: $effect) {
             ForEach(SettingsPage.selectableEffects, id: \.self) { id in
                 Text(SettingsPage.effectName(id)).tag(id)
+            }
+            // An effect the app does not offer, such as custom lighting, is shown but cannot be picked.
+            if !SettingsPage.selectableEffects.contains(settings.lightingEffect) {
+                Text(settings.lightingEffectName).tag(settings.lightingEffect).selectionDisabled()
             }
         }
         if effect != 0 {
@@ -213,7 +203,7 @@ private struct LightingControls: View {
         }
         // Follow what the keyboard reports, and load an effect's stored values when it is picked.
         .task(id: settings.bytes) {
-            effect = SettingsPage.selectableEffects.contains(settings.lightingEffect) ? settings.lightingEffect : 0
+            effect = settings.lightingEffect
             loadStoredValues()
         }
         .onChange(of: effect) { loadStoredValues() }
@@ -230,15 +220,23 @@ private struct LightingControls: View {
     }
 }
 
-private struct SettingsRows: View {
+/// The stored lighting, read-only.
+private struct LightingRows: View {
     let settings: SettingsPage
 
     var body: some View {
-        LabeledContent("Lighting effect", value: settings.lightingEffectName)
+        LabeledContent("Effect", value: settings.lightingEffectName)
         if let effect = settings.settings(forEffect: settings.lightingEffect) {
             LabeledContent("Brightness", value: "\(effect.brightness)")
             LabeledContent("Speed", value: "\(effect.speed)")
         }
+    }
+}
+
+private struct KeyboardSettingsRows: View {
+    let settings: SettingsPage
+
+    var body: some View {
         LabeledContent("Polling rate", value: settings.pollingRateHz.map { "\($0) Hz" } ?? "Level \(settings.pollingLevel)")
         LabeledContent("Sleep after", value: sleepText)
         LabeledContent("Mac layout", value: settings.macMode ? "On" : "Off")
@@ -253,6 +251,6 @@ private struct SettingsRows: View {
 }
 
 #Preview {
-    ContentView()
+    GeneralView()
         .environment(KeyboardMonitor())
 }

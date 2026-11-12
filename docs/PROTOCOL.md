@@ -232,4 +232,7 @@ not been tried.
 - **Brightness range**: 9 works, but the vendor UI says 4.
 - **Custom lighting effect code**: 277 or 21.
 - **Battery status**: "charging" seen once; other bits unknown.
+- **Battery level granularity**: a whole percent. Only 99 and 100 have
+  been seen, so whether the firmware reports every 1% across the range,
+  or steps or a voltage curve lower down, is unknown.
 - **Mac layout and Win lock**: never seen set on the test keyboard.

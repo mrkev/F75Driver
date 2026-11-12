@@ -8,7 +8,6 @@
 //
 
 import AppKit
-import ServiceManagement
 import SwiftUI
 
 extension BatteryStatus.Power {
@@ -94,8 +93,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.addItem(ActionItem("Settings…", key: ",") { [weak self] in
             self?.openStatusWindow()
         })
-        let login = ActionItem("Open at Login") { [weak self] in self?.toggleLaunchAtLogin() }
-        login.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        let login = ActionItem("Open at Login") { LaunchAtLogin.setEnabled(!LaunchAtLogin.isEnabled) }
+        login.state = LaunchAtLogin.isEnabled ? .on : .off
         menu.addItem(login)
 
         menu.addItem(.separator())
@@ -190,22 +189,6 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let item = NSMenuItem(title: "Lighting", action: nil, keyEquivalent: "")
         item.submenu = submenu
         return item
-    }
-
-    private func toggleLaunchAtLogin() {
-        let service = SMAppService.mainApp
-        do {
-            if service.status == .enabled {
-                try service.unregister()
-            } else {
-                try service.register()
-            }
-        } catch {
-            NSAlert(error: error).runModal()
-        }
-        if service.status == .requiresApproval {
-            SMAppService.openSystemSettingsLoginItems()
-        }
     }
 }
 
