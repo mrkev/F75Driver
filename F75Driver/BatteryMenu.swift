@@ -8,6 +8,16 @@
 import AppKit
 import SwiftUI
 
+extension BatteryStatus.Power {
+    var title: String {
+        switch self {
+        case .onBattery: "On battery"
+        case .charging: "Charging"
+        case .pluggedInFull: "Plugged in, not charging"
+        }
+    }
+}
+
 struct BatteryMenu: View {
     @Environment(KeyboardMonitor.self) private var monitor
     @Environment(\.openWindow) private var openWindow
@@ -47,7 +57,9 @@ struct BatteryMenu: View {
 
     private func line(for kind: ConnectionKind) -> String {
         guard let status = monitor.status[kind] else { return "\(kind.title): reading…" }
-        if let battery = status.battery { return "\(kind.title): \(battery.level)%" }
+        if let battery = status.battery {
+            return "\(kind.title): \(battery.level)%, \(battery.power.title.lowercased())"
+        }
         // A sleeping keyboard stops answering the dongle; show what was last read.
         if let battery = monitor.lastBattery { return "\(kind.title): not answering (last \(battery.level)%)" }
         return "\(kind.title): not answering"

@@ -3,8 +3,9 @@
 //  F75Driver
 //
 //  Observable state for the status window: which connections exist and what
-//  the keyboard reports over each. Read-only: it only ever sends the read
-//  requests defined in F75Protocol.
+//  the keyboard reports over each. It sends the read requests defined in
+//  F75Protocol and one write: lighting changes to the settings page, over
+//  the cable only.
 //
 
 import Foundation
@@ -50,6 +51,9 @@ final class KeyboardMonitor {
     /// Most recent battery reading from any connection. Kept while the
     /// keyboard sleeps and stops answering; cleared when nothing is attached.
     private(set) var lastBattery: BatteryStatus?
+
+    private(set) var isWritingLighting = false
+    private(set) var lightingError: String?
 
     private let transport = HIDTransport()
     private var reassembler: F75Protocol.DongleReassembler?
@@ -147,6 +151,51 @@ final class KeyboardMonitor {
                 if let battery = result.battery { lastBattery = battery }
             }
         } while refreshQueued
+    }
+
+    // MARK: Writing
+
+    /// Stores a lighting change on the keyboard. Cable only: the page is read
+    /// fresh, changed in its lighting bytes alone, written, and read back.
+    func setLighting(effect: Int, brightness: Int, speed: Int) async {
+        guard !isWritingLighting else { return }
+        isWritingLighting = true
+        lightingError = nil
+        defer { isWritingLighting = false }
+        // Keep refreshes from interleaving their reports with the write.
+        while isRefreshing { try? await Task.sleep(for: .milliseconds(20)) }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        do {
+            guard let current = SettingsPage(payload: try await readWired(.settings)), current.hasSignature else {
+                throw LightingError.unreadable
+            }
+            guard let updated = current.settingLighting(effect: effect, brightness: brightness, speed: speed),
+                  let report = F75Protocol.wiredSettingsWrite(updated, replacing: current) else {
+                throw LightingError.rejected
+            }
+            if updated != current {
+                try transport.setWiredFeature(report)
+                try await Task.sleep(for: .milliseconds(150))
+                let stored = SettingsPage(payload: try await readWired(.settings))
+                guard stored == updated else { throw LightingError.notStored }
+            }
+        } catch {
+            lightingError = error.localizedDescription
+        }
+        status[.cable] = await read(.cable)
+    }
+
+    private enum LightingError: LocalizedError {
+        case unreadable, rejected, notStored
+
+        var errorDescription: String? {
+            switch self {
+            case .unreadable: "Could not read the keyboard's current settings, so nothing was changed."
+            case .rejected: "That lighting setting is outside what the keyboard is known to accept. Nothing was changed."
+            case .notStored: "The keyboard did not report the new lighting back. Check the keyboard and refresh."
+            }
+        }
     }
 
     private func read(_ kind: ConnectionKind) async -> ConnectionStatus {

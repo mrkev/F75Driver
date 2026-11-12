@@ -100,6 +100,12 @@ struct DongleProtocolTests {
         #expect(BatteryStatus(payload: reassembler.payload ?? [])?.level == 80)
     }
 
+    @Test func batteryPowerStates() {
+        #expect(BatteryStatus(payload: [99, 0x10])?.power == .charging)
+        #expect(BatteryStatus(payload: [100, 0x11])?.power == .pluggedInFull)
+        #expect(BatteryStatus(payload: [100, 0x01])?.power == .onBattery)
+    }
+
     @Test func onlineEvents() {
         #expect(F75Protocol.dongleOnlineEvent([0x0A, 0, 0, 0, 0x02, 0x01]) == true)
         #expect(F75Protocol.dongleOnlineEvent([0x0A, 0, 0, 0, 0x02, 0x00]) == false)
@@ -143,5 +149,61 @@ struct SettingsPageTests {
         #expect(SettingsPage(payload: [UInt8](repeating: 0, count: 100)) == nil)
         let unsigned = try #require(SettingsPage(payload: [UInt8](repeating: 0, count: 128)))
         #expect(!unsigned.hasSignature)
+    }
+}
+
+struct LightingWriteTests {
+    private func page(_ changes: [Int: UInt8] = [:]) -> SettingsPage {
+        var bytes = [UInt8](repeating: 0, count: 128)
+        bytes[126] = 0x5A
+        bytes[127] = 0xA5
+        for (offset, value) in changes { bytes[offset] = value }
+        return SettingsPage(payload: bytes)!
+    }
+
+    @Test func changesOnlyTheChosenEffect() throws {
+        let current = page([1: 3, 24: 2, 70: 9, 71: 0x37])
+        let updated = try #require(current.settingLighting(effect: 7, brightness: 4, speed: 2))
+        #expect(updated.lightingEffect == 7)
+        // Colour nibble (7) is kept; brightness and speed are replaced.
+        #expect(updated.settings(forEffect: 7) == .init(brightness: 4, speed: 2, color: 7))
+        let changed = (0..<128).filter { updated.bytes[$0] != current.bytes[$0] }
+        #expect(changed == [10, 70, 71])
+    }
+
+    @Test func turningOffLeavesTheTableAlone() throws {
+        let current = page([10: 3, 62: 9, 63: 0x37])
+        let updated = try #require(current.settingLighting(effect: 0, brightness: 1, speed: 1))
+        #expect((0..<128).filter { updated.bytes[$0] != current.bytes[$0] } == [10])
+    }
+
+    @Test func rejectsOutOfRangeValues() {
+        let current = page()
+        #expect(current.settingLighting(effect: 6, brightness: 4, speed: 2) == nil)
+        #expect(current.settingLighting(effect: 19, brightness: 4, speed: 2) == nil)
+        #expect(current.settingLighting(effect: 277, brightness: 4, speed: 2) == nil)
+        #expect(current.settingLighting(effect: 1, brightness: 10, speed: 2) == nil)
+        #expect(current.settingLighting(effect: 1, brightness: 4, speed: 5) == nil)
+    }
+
+    @Test func writeReportCarriesThePageAfterTheHeader() throws {
+        let current = page([1: 3])
+        let updated = try #require(current.settingLighting(effect: 1, brightness: 5, speed: 0))
+        let report = try #require(F75Protocol.wiredSettingsWrite(updated, replacing: current))
+        #expect(report.count == 520)
+        #expect(Array(report.prefix(8)) == [0x06, 0x04, 0x00, 0x00, 0x01, 0x00, 0x80, 0x00])
+        #expect(Array(report[8..<136]) == updated.bytes)
+        #expect(report.dropFirst(136).allSatisfy { $0 == 0 })
+    }
+
+    @Test func refusesWritesThatTouchOtherSettings() {
+        let current = page([1: 3])
+        // Polling rate, sleep timer and the signature are outside the lighting bytes.
+        #expect(F75Protocol.wiredSettingsWrite(page([1: 2]), replacing: current) == nil)
+        #expect(F75Protocol.wiredSettingsWrite(page([1: 3, 24: 4]), replacing: current) == nil)
+        var unsigned = current.bytes
+        unsigned[127] = 0
+        #expect(F75Protocol.wiredSettingsWrite(SettingsPage(payload: unsigned)!, replacing: current) == nil)
+        #expect(F75Protocol.wiredSettingsWrite(current, replacing: SettingsPage(payload: unsigned)!) == nil)
     }
 }

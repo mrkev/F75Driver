@@ -25,7 +25,8 @@ nonisolated enum F75Protocol {
     static let wiredPayloadOffset = 8
 
     /// Read requests over the cable. Every read command has the top bit set;
-    /// the matching write is the same value without it, and is never sent.
+    /// the matching write is the same value without it. The only write this
+    /// app sends is the settings page, built by `wiredSettingsWrite`.
     enum WiredRead: CaseIterable {
         case identity, settings, battery
 
@@ -64,6 +65,26 @@ nonisolated enum F75Protocol {
               reply[0] == wiredReportID,
               reply[1] == read.command else { return nil }
         return Array(reply[wiredPayloadOffset..<(wiredPayloadOffset + read.payloadLength)])
+    }
+
+    // MARK: Writing the settings page (cable only)
+
+    /// The only write this app sends: the stored settings page, command 0x04.
+    static let wiredSettingsWriteHeader: [UInt8] = [0x04, 0x00, 0x00, 0x01, 0x00, 0x80, 0x00]
+
+    /// The feature report that stores `updated`, or nil unless it is safe:
+    /// both pages must be complete, and `updated` may differ from `current`
+    /// (the page just read from the keyboard) only in the lighting bytes.
+    static func wiredSettingsWrite(_ updated: SettingsPage, replacing current: SettingsPage) -> [UInt8]? {
+        guard current.hasSignature, updated.hasSignature else { return nil }
+        for offset in 0..<SettingsPage.length where updated.bytes[offset] != current.bytes[offset] {
+            guard SettingsPage.lightingOffsets.contains(offset) else { return nil }
+        }
+        var report = [UInt8](repeating: 0, count: wiredReportLength)
+        report[0] = wiredReportID
+        report.replaceSubrange(1...wiredSettingsWriteHeader.count, with: wiredSettingsWriteHeader)
+        report.replaceSubrange(wiredPayloadOffset..<(wiredPayloadOffset + SettingsPage.length), with: updated.bytes)
+        return report
     }
 
     // MARK: 2.4 GHz dongle (output / input reports)
@@ -185,8 +206,20 @@ nonisolated struct BatteryStatus: Equatable {
     /// Percentage as reported by the keyboard.
     let level: Int
     /// Second byte of the reply. The vendor stores it as "battery status"
-    /// without interpreting it, so it is shown as-is until its values are known.
+    /// without interpreting it; the meanings below come from readings taken
+    /// on an F75: 0x10 plugged in at 99%, 0x11 plugged in at 100%, 0x01 unplugged.
     let statusCode: Int
+
+    enum Power: Equatable {
+        case onBattery, charging, pluggedInFull
+    }
+
+    /// Bit 4 is set while the cable supplies power. Bit 0 was clear only
+    /// while the battery was still filling, so it is read as "not charging".
+    var power: Power {
+        guard statusCode & 0x10 != 0 else { return .onBattery }
+        return statusCode & 0x01 == 0 ? .charging : .pluggedInFull
+    }
 
     init?(payload: [UInt8]) {
         guard payload.count >= 2 else { return nil }
@@ -243,7 +276,7 @@ nonisolated struct SettingsPage: Equatable {
         return EffectSettings(brightness: Int(bytes[at]), speed: Int(bytes[at + 1] >> 4), color: Int(bytes[at + 1] & 0x0F))
     }
 
-    private static let effectNames: [Int: String] = [
+    fileprivate static let effectNames: [Int: String] = [
         0: "Off", 1: "Fixed on", 2: "Respire", 3: "Rainbow", 4: "Flash away",
         5: "Raindrops", 6: "Rainbow wheel", 7: "Ripples shining", 8: "Stars twinkle",
         9: "Shadow disappear", 10: "Retro snake", 11: "Neon stream", 12: "Reaction",
@@ -254,6 +287,40 @@ nonisolated struct SettingsPage: Equatable {
     ]
 
     var lightingEffectName: String {
-        Self.effectNames[lightingEffect] ?? "Effect \(lightingEffect)"
+        Self.effectName(lightingEffect)
+    }
+}
+
+// MARK: Changing lighting
+
+extension SettingsPage {
+    static let maxBrightness = 9
+    static let maxSpeed = 4
+    /// Onboard effects offered for selection. 6 and 14 stay dark on the F75
+    /// according to the aula-f75-mac-driver project, so they are left out.
+    static let selectableEffects: [Int] = (0...18).filter { $0 != 6 && $0 != 14 }
+
+    /// Bytes a lighting change may touch: the per-key flag, the active
+    /// effect, and the per-effect brightness/speed table.
+    static let lightingOffsets: Set<Int> = Set([9, 10]).union(effectTableOffset..<(length - 2))
+
+    static func effectName(_ id: Int) -> String { effectNames[id] ?? "Effect \(id)" }
+
+    /// A copy with `effect` active and, for a real effect, its stored
+    /// brightness and speed replaced. The effect's colour is kept. Returns
+    /// nil for values outside what the keyboard is known to accept.
+    func settingLighting(effect: Int, brightness: Int, speed: Int) -> SettingsPage? {
+        guard Self.selectableEffects.contains(effect),
+              (0...Self.maxBrightness).contains(brightness),
+              (0...Self.maxSpeed).contains(speed) else { return nil }
+        var updated = bytes
+        updated[9] = 0
+        updated[10] = UInt8(effect)
+        if effect != 0 {
+            let at = Self.effectTableOffset + (effect - 1) * 2
+            updated[at] = UInt8(brightness)
+            updated[at + 1] = UInt8(speed) << 4 | (updated[at + 1] & 0x0F)
+        }
+        return SettingsPage(payload: updated)
     }
 }

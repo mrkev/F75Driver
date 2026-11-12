@@ -34,7 +34,8 @@ struct F75DriverApp: App {
             HStack(spacing: 4) {
                 Image(systemName: "keyboard")
                 if let battery = monitor.lastBattery {
-                    Text("\(battery.level)%")
+                    // U+FE0E keeps the bolt monochrome like the rest of the menu bar.
+                    Text(battery.power == .charging ? "\(battery.level)% \u{26A1}\u{FE0E}" : "\(battery.level)%")
                 }
             }
         }

@@ -103,10 +103,13 @@ private struct ConnectionSection: View {
                             Text("\(battery.level)%").monospacedDigit()
                         }
                     }
-                    LabeledContent("Battery status code", value: "\(battery.statusCode)")
+                    LabeledContent("Power", value: battery.power.title)
                 }
                 if let settings = status.settings {
                     SettingsRows(settings: settings)
+                    if kind == .cable {
+                        LightingControls(settings: settings)
+                    }
                 }
                 if !status.raw.isEmpty {
                     DisclosureGroup("Raw data") {
@@ -134,6 +137,56 @@ private struct ConnectionSection: View {
         stride(from: 0, to: bytes.count, by: 16).map { start in
             bytes[start..<min(start + 16, bytes.count)].map { String(format: "%02X", $0) }.joined(separator: " ")
         }.joined(separator: "\n")
+    }
+}
+
+/// Changes the stored lighting. Offered over the cable only.
+private struct LightingControls: View {
+    @Environment(KeyboardMonitor.self) private var monitor
+    let settings: SettingsPage
+
+    @State private var effect = 0
+    @State private var brightness = 0
+    @State private var speed = 0
+
+    var body: some View {
+        Picker("Change effect", selection: $effect) {
+            ForEach(SettingsPage.selectableEffects, id: \.self) { id in
+                Text(SettingsPage.effectName(id)).tag(id)
+            }
+        }
+        if effect != 0 {
+            Stepper("Brightness: \(brightness)", value: $brightness, in: 0...SettingsPage.maxBrightness)
+            Stepper("Speed: \(speed)", value: $speed, in: 0...SettingsPage.maxSpeed)
+        }
+        LabeledContent {
+            Button("Apply to Keyboard") {
+                Task { await monitor.setLighting(effect: effect, brightness: brightness, speed: speed) }
+            }
+            .disabled(monitor.isWritingLighting || !hasChanges)
+        } label: {
+            if let error = monitor.lightingError {
+                Text(error).foregroundStyle(.red)
+            } else {
+                Text("Saved on the keyboard when applied.").foregroundStyle(.secondary)
+            }
+        }
+        // Follow what the keyboard reports, and load an effect's stored values when it is picked.
+        .task(id: settings.bytes) {
+            effect = SettingsPage.selectableEffects.contains(settings.lightingEffect) ? settings.lightingEffect : 0
+            loadStoredValues()
+        }
+        .onChange(of: effect) { loadStoredValues() }
+    }
+
+    private func loadStoredValues() {
+        guard let stored = settings.settings(forEffect: effect) else { return }
+        brightness = min(stored.brightness, SettingsPage.maxBrightness)
+        speed = min(stored.speed, SettingsPage.maxSpeed)
+    }
+
+    private var hasChanges: Bool {
+        settings.settingLighting(effect: effect, brightness: brightness, speed: speed).map { $0 != settings } ?? false
     }
 }
 
