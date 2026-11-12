@@ -35,6 +35,7 @@ bricked by writing settings over the dongle.
 | `F75Driver/HID/HIDTransport.swift` | IOKit HID: finds the two interfaces, opens them, moves raw reports. |
 | `F75Driver/KeyboardMonitor.swift` | `@Observable` state: permission, connections, periodic reads, the lighting write. |
 | `F75Driver/ContentView.swift` | Status window, permission prompt, lighting controls. |
+| `F75Driver/KeyboardIllustration.swift` | Top-down drawing of the F75 in the owner's colourway (black, navy, yellow), from shapes in key units. No product photo is shipped. |
 | `F75Driver/StatusMenu.swift` | Menu bar item and its menu, in AppKit (`NSStatusItem`) so the header row can be a custom view. |
 | `F75Driver/F75DriverApp.swift` | Window scene and app delegate. The status item is made in `applicationDidFinishLaunching`; making it in `App.init()` crashes. |
 | `F75DriverTests/F75DriverTests.swift` | Swift Testing suites for the protocol layer. |

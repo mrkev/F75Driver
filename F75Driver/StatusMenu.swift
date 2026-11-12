@@ -113,18 +113,14 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     /// What the header shows: the model and battery, then how it is connected.
     private func summary() -> StatusMenuHeader.Summary {
-        if monitor.present.isEmpty {
+        guard let kind = monitor.activeConnection else {
             return .init(title: "AULA F75", value: nil, lines: ["No keyboard connected"])
         }
         if !monitor.blocked.isEmpty {
             return .init(title: "AULA F75", value: nil, lines: ["Input Monitoring permission needed"])
         }
-        // With the switch on USB the cable answers and the dongle cannot, so
-        // the connection that reports a battery is the one in use.
-        let kinds = ConnectionKind.allCases.filter { monitor.present.contains($0) }
-        let kind = kinds.first { monitor.status[$0]?.battery != nil } ?? kinds[0]
         let status = monitor.status[kind]
-        let title = monitor.status.values.lazy.compactMap { $0.identity?.modelName }.first ?? "AULA F75"
+        let title = monitor.modelName ?? "AULA F75"
 
         var lines = ["Connection: \(kind.title)"]
         let level: Int?

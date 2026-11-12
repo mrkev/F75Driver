@@ -57,6 +57,19 @@ final class KeyboardMonitor {
     private(set) var isWritingLighting = false
     private(set) var lightingError: String?
 
+    /// The connection the keyboard is using. With the switch on USB the
+    /// cable answers and the dongle cannot, so the one that reported a
+    /// battery wins; otherwise the cable, then the dongle.
+    var activeConnection: ConnectionKind? {
+        let kinds = ConnectionKind.allCases.filter { present.contains($0) }
+        return kinds.first { status[$0]?.battery != nil } ?? kinds.first
+    }
+
+    /// Model name from whichever connection has identified the keyboard.
+    var modelName: String? {
+        ConnectionKind.allCases.lazy.compactMap { self.status[$0]?.identity?.modelName }.first
+    }
+
     private let transport = HIDTransport()
     private var reassembler: F75Protocol.DongleReassembler?
     private var refreshQueued = false

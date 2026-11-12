@@ -10,6 +10,10 @@ struct ContentView: View {
 
     var body: some View {
         Form {
+            Section {
+            } header: {
+                KeyboardHeader()
+            }
             if monitor.present.isEmpty {
                 Section {
                     ContentUnavailableView(
@@ -29,7 +33,7 @@ struct ContentView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(minWidth: 460, minHeight: 420)
+        .frame(minWidth: 460, minHeight: 520)
         .toolbar {
             ToolbarItem {
                 if monitor.isRefreshing {
@@ -42,6 +46,43 @@ struct ContentView: View {
                 }
             }
         }
+    }
+}
+
+/// The drawing of the keyboard with its name and battery underneath.
+private struct KeyboardHeader: View {
+    @Environment(KeyboardMonitor.self) private var monitor
+
+    var body: some View {
+        VStack(spacing: 10) {
+            KeyboardIllustration()
+                .frame(maxWidth: 520)
+                .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
+                .opacity(monitor.activeConnection == nil ? 0.45 : 1)
+            VStack(spacing: 2) {
+                Text(monitor.modelName ?? "AULA F75")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+        .textCase(nil)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+    }
+
+    private var subtitle: String {
+        guard let kind = monitor.activeConnection else { return "Not connected" }
+        var parts = [kind.title]
+        if let battery = monitor.status[kind]?.battery ?? monitor.lastBattery {
+            parts.append("\(battery.level)%")
+            parts.append(battery.power.title)
+        }
+        return parts.joined(separator: " · ")
     }
 }
 
