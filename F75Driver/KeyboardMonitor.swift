@@ -51,6 +51,8 @@ final class KeyboardMonitor {
     /// Most recent battery reading from any connection. Kept while the
     /// keyboard sleeps and stops answering; cleared when nothing is attached.
     private(set) var lastBattery: BatteryStatus?
+    /// When `lastBattery` was read.
+    private(set) var lastBatteryDate: Date?
 
     private(set) var isWritingLighting = false
     private(set) var lightingError: String?
@@ -121,7 +123,10 @@ final class KeyboardMonitor {
         self.blocked = blocked
         for kind in ConnectionKind.allCases where !present.contains(kind) { status[kind] = nil }
         if !present.contains(.dongle) { dongleKeyboardOnline = nil }
-        if present.isEmpty { lastBattery = nil }
+        if present.isEmpty {
+            lastBattery = nil
+            lastBatteryDate = nil
+        }
         Task { await refresh() }
     }
 
@@ -148,7 +153,10 @@ final class KeyboardMonitor {
             for kind in ConnectionKind.allCases where present.contains(kind) && !blocked.contains(kind) {
                 let result = await read(kind)
                 status[kind] = result
-                if let battery = result.battery { lastBattery = battery }
+                if let battery = result.battery {
+                    lastBattery = battery
+                    lastBatteryDate = result.updated
+                }
             }
         } while refreshQueued
     }

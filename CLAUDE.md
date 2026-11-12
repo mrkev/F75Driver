@@ -35,9 +35,11 @@ bricked by writing settings over the dongle.
 | `F75Driver/HID/HIDTransport.swift` | IOKit HID: finds the two interfaces, opens them, moves raw reports. |
 | `F75Driver/KeyboardMonitor.swift` | `@Observable` state: permission, connections, periodic reads, the lighting write. |
 | `F75Driver/ContentView.swift` | Status window, permission prompt, lighting controls. |
-| `F75Driver/BatteryMenu.swift`, `F75DriverApp.swift` | Menu bar battery item and scenes. |
+| `F75Driver/StatusMenu.swift` | Menu bar item and its menu, in AppKit (`NSStatusItem`) so the header row can be a custom view. |
+| `F75Driver/F75DriverApp.swift` | Window scene and app delegate. The status item is made in `applicationDidFinishLaunching`; making it in `App.init()` crashes. |
 | `F75DriverTests/F75DriverTests.swift` | Swift Testing suites for the protocol layer. |
 | `Scripts/test-protocol.sh` | Runs those tests without Xcode. |
+| `Scripts/make-icon.swift` | Draws the app icon and writes every size into the asset catalog. Run from the repo root. |
 
 Keep the protocol file free of IOKit and SwiftUI so the test script keeps working.
 
@@ -90,6 +92,9 @@ Done and verified on a real F75:
 
 - Read model, battery and settings page over cable and dongle.
 - Menu bar battery percentage, refreshed every minute.
+- Menu header in the style of the system battery menu (model, level,
+  connection, power), lighting submenu over the cable, Open at Login.
+  Lighting from the menu has not yet been exercised on hardware.
 - Power state: on battery, charging, plugged in and not charging.
 - Lighting over the cable: effect, brightness, speed. Only "Fixed on" and
   brightness changes were exercised on hardware.
